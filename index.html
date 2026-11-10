@@ -179,27 +179,27 @@ main{
   outline:none;
 }
 .goal-input:focus{border-color:var(--panel-accent3);}
-.goal-input::placeholder{color:#8a6c65;}
-.quick-goals{
-  display:flex;
-  gap:8px;
-  flex-wrap:wrap;
-  margin:-10px 0 22px;
+.multi-goal-options{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+  margin:16px 0;
 }
-.quick-goal-btn{
+.multi-goal-options label{display:flex; align-items:center; gap:6px; cursor:pointer;}
+.multi-draw-toggle{margin-top:24px;}
+.multi-draw-dialog{
+  box-sizing:border-box;
+  width:min(400px,calc(100% - 32px));
+  max-height:calc(100% - 32px);
+  padding:20px;
   border:1px solid var(--text);
+  border-radius:20px;
   background:var(--paper);
   color:var(--text);
-  padding:8px 14px;
-  border-radius:18px;
-  font-family:'DFKai-SB','BiauKai','KaiTi','標楷體',serif;
-  font-size:14px;
-  cursor:pointer;
 }
-.quick-goal-btn:active{
-  background:var(--panel-accent2);
-  transform:translateY(1px);
-}
+.multi-draw-dialog::backdrop{background:rgba(28,31,36,.75);}
+.multi-draw-dialog h2{margin:0; font-size:22px;}
+.multi-draw-actions{display:flex; gap:12px;}
 
 .minute-row{
   display:flex;
@@ -736,29 +736,34 @@ main{
 
       <div id="setup-panel" class="setup-card">
         <p class="setup-title">設定目標</p>
-        <p class="setup-sub">寫下想完成的事，設定時間，時間內按下完成就能拿到一張車貼。</p>
+        <p class="setup-sub">選擇想完成的事並設定時間，時間內按下完成就能抽車貼。</p>
 
-        <span class="field-label">目標</span>
-        <input id="goal-input" class="goal-input" type="text" placeholder="例如：收拾玩具 / 寫功課" maxlength="24">
-        <div class="quick-goals" aria-label="常用目標">
-          <button type="button" class="quick-goal-btn" data-goal="刷牙" aria-label="刷牙">🪥</button>
-          <button type="button" class="quick-goal-btn" data-goal="洗澡" aria-label="洗澡">🛁</button>
-          <button type="button" class="quick-goal-btn" data-goal="換衣服" aria-label="換衣服">👚</button>
-          <button type="button" class="quick-goal-btn" data-goal="換褲子" aria-label="換褲子">👖</button>
-          <button type="button" class="quick-goal-btn" data-goal="穿鞋子" aria-label="穿鞋子">👟</button>
-          <button type="button" class="quick-goal-btn" data-goal="穿襪子" aria-label="穿襪子">🧦</button>
-          <button type="button" class="quick-goal-btn" data-goal="收拾玩具" aria-label="收拾玩具">🚗</button>
-        </div>
+        <label class="field-label" for="goal-input">目標</label>
+        <select id="goal-input" class="goal-input">
+          <option value="">請選擇目標</option>
+        </select>
+        <input id="custom-goal-input" class="goal-input" type="text" maxlength="24"
+          placeholder="輸入自訂目標" aria-label="自訂目標" hidden>
 
         <span class="field-label">時間</span>
         <div class="minute-row">
           <button class="min-btn" id="min-minus">−</button>
-          <div class="min-display" id="min-display">5<span>分鐘</span></div>
+          <div class="min-display" id="min-display">1<span>分鐘</span></div>
           <button class="min-btn" id="min-plus">＋</button>
         </div>
         <div class="presets" id="presets" aria-label="每次調整分鐘數"></div>
 
         <button class="start-btn" id="start-btn">⏰ 開始計時</button>
+
+        <button class="start-btn multi-draw-toggle" id="multi-draw-open" type="button" aria-haspopup="dialog">🎲 連續抽獎</button>
+        <dialog class="multi-draw-dialog" id="multi-draw-panel" aria-labelledby="multi-draw-title">
+          <h2 id="multi-draw-title">勾選抽獎目標</h2>
+          <div id="multi-goal-options" class="multi-goal-options" role="group" aria-labelledby="multi-draw-title"></div>
+          <div class="multi-draw-actions">
+            <button class="start-btn" id="multi-draw-cancel" type="button">取消</button>
+            <button class="start-btn" id="multi-draw-btn" type="button" disabled>確認抽獎</button>
+          </div>
+        </dialog>
       </div>
 
       <div id="run-panel" class="run-wrap" style="display:none;">
@@ -811,6 +816,7 @@ main{
       <div class="dice-card">
         <div class="dice-title" id="dice-title">來骰骰子吧！</div>
         <div class="dice-stage" id="dice-stage"></div>
+        <div class="dice-title" id="dice-goal" hidden></div>
         <div class="dice-result" id="dice-result">骰子轉轉轉～</div>
       </div>
     </div>
@@ -893,7 +899,7 @@ function drawCarIndex() {
   return carDeck.pop();
 }
 /* ===================== STATE ===================== */
-let minutes = 5;
+let minutes = 1;
 let stickers = [];
 let currentAccount = '';
 let cloudReady = false;
@@ -1108,11 +1114,29 @@ document.querySelectorAll('.tab').forEach(btn=>{
 });
 
 /* ===================== SETUP PANEL ===================== */
-document.querySelectorAll('.quick-goal-btn').forEach(btn=>{
-  btn.addEventListener('click', ()=>{
-    el('goal-input').value = btn.dataset.goal;
-    el('goal-input').focus();
-  });
+const GOALS = [
+  '起床','刷牙','洗臉','穿衣服','穿褲子','穿襪子','穿鞋子','按電梯',
+  '洗澡','洗頭','吹頭髮','擦乳液','吃飯','準時關平板','點眼藥水','寫作業','睡覺'
+];
+const multiGoalOptions = el('multi-goal-options');
+for(const goal of GOALS){
+  el('goal-input').add(new Option(goal, goal));
+  const label = document.createElement('label');
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.value = goal;
+  label.append(checkbox, goal);
+  multiGoalOptions.append(label);
+}
+const goalSelect = el('goal-input');
+const customGoalInput = el('custom-goal-input');
+goalSelect.add(new Option('其他', 'custom'));
+goalSelect.addEventListener('change', ()=>{
+  customGoalInput.hidden = goalSelect.value !== 'custom';
+  if(!customGoalInput.hidden) customGoalInput.focus();
+});
+multiGoalOptions.addEventListener('change', ()=>{
+  el('multi-draw-btn').disabled = !multiGoalOptions.querySelector('input:checked');
 });
 
 const MINUTE_STEPS = [1,5,10];
@@ -1170,11 +1194,12 @@ const CIRC = 2 * Math.PI * RADIUS;
 el('dial-progress').style.strokeDasharray = `${CIRC}`;
 
 el('start-btn').addEventListener('click', async ()=>{
-  const goal = el('goal-input').value.trim();
+  const input = goalSelect.value === 'custom' ? customGoalInput : goalSelect;
+  const goal = input.value.trim();
   if(!goal){
-    el('goal-input').focus();
-    el('goal-input').style.borderColor = 'var(--red)';
-    setTimeout(()=>{ el('goal-input').style.borderColor = ''; }, 900);
+    input.focus();
+    input.style.borderColor = 'var(--red)';
+    setTimeout(()=>{ input.style.borderColor = ''; }, 900);
     return;
   }
   currentGoal = goal;
@@ -1225,7 +1250,9 @@ function resetToSetup(){
   el('complete-btn').disabled = false;
   el('run-panel').style.display = 'none';
   el('setup-panel').style.display = 'block';
-  el('goal-input').value = '';
+  goalSelect.value = '';
+  customGoalInput.value = '';
+  customGoalInput.hidden = true;
 }
 
 /* ===================== ALARM ===================== */
@@ -1283,10 +1310,50 @@ function rollDie(randomValue=Math.random()){
 }
 function wait(ms){ return new Promise(resolve=>setTimeout(resolve,ms)); }
 
-async function rollDiceReward(){
+const multiDrawPanel = el('multi-draw-panel');
+el('multi-draw-open').addEventListener('click', ()=>{
+  if(!rewardInProgress) multiDrawPanel.showModal();
+});
+el('multi-draw-cancel').addEventListener('click', ()=>multiDrawPanel.close());
+
+el('multi-draw-btn').addEventListener('click', async ()=>{
+  if(rewardInProgress) return;
+  const selected = [...multiGoalOptions.querySelectorAll('input:checked')];
+  if(!selected.length) return;
+  const goals = selected.map(input=>input.value);
+  selected.forEach(input=>{ input.checked = false; });
+  multiDrawPanel.close();
+  rewardInProgress = true;
+  el('multi-draw-btn').disabled = true;
+  el('start-btn').disabled = true;
+  try{
+    for(const [index,goal] of goals.entries()){
+      const dice = await rollDiceReward(goal, index + 1);
+      const rewardCount = dice.reduce((sum,value)=>sum+value,0);
+      await awardSticker(goal, null, null, rewardCount);
+    }
+  }finally{
+    el('dice-overlay').classList.remove('show');
+    el('start-btn').disabled = false;
+    rewardInProgress = false;
+  }
+});
+
+async function rollDiceReward(goal, round){
+  el('dice-goal').hidden = round === undefined;
+  el('dice-goal').textContent = goal ?? '';
+  if(round !== undefined){
+    el('dice-title').textContent = String(round);
+    el('dice-stage').replaceChildren();
+    el('dice-result').textContent = '';
+    el('dice-overlay').classList.add('show');
+    await wait(650);
+  }
   const diceCount = chooseDiceCount();
   const results = Array.from({length:diceCount},()=>rollDie());
-  el('dice-title').textContent = diceCount === 2 ? '幸運！兩顆骰子！' : '來骰骰子吧！';
+  if(round === undefined){
+    el('dice-title').textContent = diceCount === 2 ? '幸運！兩顆骰子！' : '來骰骰子吧！';
+  }
   el('dice-result').textContent = '骰子轉轉轉～';
   el('dice-stage').innerHTML = results.map((_,index)=>`<div class="die rolling" id="reward-die-${index}">⚀</div>`).join('');
   el('dice-overlay').classList.add('show');
@@ -1301,7 +1368,11 @@ async function rollDiceReward(){
   }));
 
   const rewardCount = results.reduce((sum,value)=>sum+value,0);
-  el('dice-result').textContent = `⭐ 獲得 ${rewardCount} 張貼紙！`;
+  if(round !== undefined){
+    el('dice-result').textContent = `抽中 ${rewardCount} 張！`;
+  }else{
+    el('dice-result').textContent = `⭐ 獲得 ${rewardCount} 張貼紙！`;
+  }
   await wait(1100);
   el('dice-overlay').classList.remove('show');
   return results;
@@ -1369,7 +1440,9 @@ async function awardSticker(goal, plannedSeconds, usedSeconds, rewardCount=1){
     ).join('');
   }
   el('sticker-goal-name').textContent = goal;
-  el('sticker-goal-time').textContent = `獲得 ${rewardCount} 張・用時 ${fmtDuration(usedSeconds)}（目標 ${fmtDuration(plannedSeconds)}）`;
+  el('sticker-goal-time').textContent = plannedSeconds === null
+    ? `獲得 ${rewardCount} 張`
+    : `獲得 ${rewardCount} 張・用時 ${fmtDuration(usedSeconds)}（目標 ${fmtDuration(plannedSeconds)}）`;
   const card = el('sticker-card');
   card.classList.toggle('multiple', awardedStickers.length > 1);
   card.classList.remove('pop','fly');
@@ -1379,15 +1452,13 @@ async function awardSticker(goal, plannedSeconds, usedSeconds, rewardCount=1){
     requestAnimationFrame(()=> card.classList.add('pop'));
   });
 
-  setTimeout(()=>{
-    card.classList.remove('pop');
-    card.classList.add('fly');
-    setTimeout(()=>{
-      el('success-overlay').classList.remove('show');
-      card.classList.remove('fly');
-      resetToSetup();
-    }, 620);
-  }, 5000);
+  await wait(5000);
+  card.classList.remove('pop');
+  card.classList.add('fly');
+  await wait(620);
+  el('success-overlay').classList.remove('show');
+  card.classList.remove('fly');
+  if(plannedSeconds !== null) resetToSetup();
 }
 
 /* ===================== ALBUM ===================== */
@@ -1428,7 +1499,9 @@ function openModal(id){
   el('modal-goal').textContent = s.goal;
   const date = new Date(s.completedAt);
   const dateStr = date.toLocaleString('zh-TW', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'});
-  el('modal-detail').innerHTML = `${s.name}・用時 ${fmtDuration(s.usedSeconds)}<br>目標時間 ${fmtDuration(s.plannedSeconds)}<br>完成於 ${dateStr}`;
+  el('modal-detail').innerHTML = s.plannedSeconds === null
+    ? `${s.name}・多連抽<br>抽取於 ${dateStr}`
+    : `${s.name}・用時 ${fmtDuration(s.usedSeconds)}<br>目標時間 ${fmtDuration(s.plannedSeconds)}<br>完成於 ${dateStr}`;
   el('modal-back').classList.add('show');
 }
 el('modal-close').addEventListener('click', ()=> el('modal-back').classList.remove('show'));
